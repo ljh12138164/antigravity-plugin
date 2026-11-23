@@ -4,7 +4,34 @@
 function createSwarmBridge() {
   const modes = ["swarm", "boost", "teamwork"];
   const selectorFor = (mode) =>
-    `[data-uri="slashCommand:${mode}"],[data-uri="slashCommand:/${mode}"]`;
+    `[data-uri="slashCommand:${mode}"],[data-uri="slashCommand:/${mode}"],[data-testid="skill-scope-item-pill"][data-uri$="/${mode}/SKILL.md" i],[data-testid="skill-scope-item-pill"][data-uri$="/native_${mode}/SKILL.md" i]`;
+  const matchesMode = (node, mode) => {
+    const uri = node.getAttribute?.("data-uri") || "";
+    if (
+      uri === `slashCommand:${mode}` ||
+      uri === `slashCommand:/${mode}` ||
+      new RegExp(`/(?:native_)?${mode}/SKILL\\.md$`, "i").test(uri)
+    )
+      return true;
+    return (
+      node.getAttribute?.("data-testid") === "skill-scope-item-pill" &&
+      (node.textContent || "").trim().replace(/^\//, "").toLowerCase() === mode
+    );
+  };
+  const nodesFor = (editor, mode) => {
+    if (!editor) return [];
+    const seen = new Set();
+    const list = [];
+    for (const node of [
+      ...editor.querySelectorAll(selectorFor(mode)),
+      ...editor.querySelectorAll('[data-testid="skill-scope-item-pill"]'),
+    ]) {
+      if (seen.has(node) || !matchesMode(node, mode)) continue;
+      seen.add(node);
+      list.push(node);
+    }
+    return list;
+  };
   const sleep = () => new Promise((resolve) => setTimeout(resolve, 30));
   let working = false,
     stopped = false;
@@ -13,8 +40,7 @@ function createSwarmBridge() {
       ?.closest(".surface-composer")
       ?.querySelector("[contenteditable=true][role=combobox]") || null;
   const active = (trigger, mode = "swarm") =>
-    modes.includes(mode) &&
-    !!editorFor(trigger)?.querySelector(selectorFor(mode));
+    modes.includes(mode) && nodesFor(editorFor(trigger), mode).length > 0;
   function select(range) {
     const selection = window.getSelection();
     selection.removeAllRanges();
@@ -45,7 +71,6 @@ function createSwarmBridge() {
   }
   async function insert(editor, valid, mode) {
     const command = "/" + mode;
-    const selector = selectorFor(mode);
     const before = editor.textContent;
     editor.focus({ preventScroll: true });
     await sleep();
@@ -88,10 +113,13 @@ function createSwarmBridge() {
       if (option) {
         if (option.closest("[aria-disabled=true],[data-disabled]")) break;
         (option.firstElementChild || option).click();
-        await sleep();
-        if (valid() && editor.querySelector(selector)) {
-          editor.focus({ preventScroll: true });
-          return true;
+        const confirmDeadline = Math.min(deadline, Date.now() + 1000);
+        while (valid() && Date.now() <= confirmDeadline) {
+          await sleep();
+          if (valid() && nodesFor(editor, mode).length) {
+            editor.focus({ preventScroll: true });
+            return true;
+          }
         }
         break;
       }
@@ -126,11 +154,11 @@ function createSwarmBridge() {
     const editor = editorFor(trigger);
     if (!editor || editor.getAttribute("aria-disabled") === "true")
       return false;
-    const existing = [...editor.querySelectorAll(selectorFor(mode))];
+    const existing = nodesFor(editor, mode);
     const selected = enabled
       ? modes
           .filter((name) => name !== mode)
-          .flatMap((name) => [...editor.querySelectorAll(selectorFor(name))])
+          .flatMap((name) => nodesFor(editor, name))
       : existing;
     if (selected.length > 32) return false;
     const chips = [
