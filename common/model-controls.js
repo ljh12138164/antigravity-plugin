@@ -1,7 +1,7 @@
 /* Separate model/effort controls, delegating selection to native menu items. */
 (() => {
   "use strict";
-  const VERSION = "1.3.15";
+  const VERSION = "1.3.16";
   if (globalThis.__AGModelControls?.version === VERSION) return;
   globalThis.__AGModelControls?.destroy();
   const rules = globalThis.__AGPA_MODEL_CONTROLS__;
